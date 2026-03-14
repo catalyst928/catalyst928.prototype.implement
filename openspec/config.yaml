@@ -1,0 +1,73 @@
+schema: spec-driven
+
+context: |
+  ## Project
+  A2A Inter-System Business Flow Demo — telecom call center scenario.
+  CC-server orchestrates CRM-server and Billing-server via A2A (JSON-RPC 2.0 over HTTP).
+
+  ## Tech Stack
+  Backend: Python 3.11+, FastAPI, Google A2A SDK, SQLite, httpx (async), uv + pyproject.toml
+  Frontend: Vue 3 (Composition API), Vite, Element Plus, Pinia, Axios, TypeScript
+  LLM backend: Ollama (used by CRM Recommendation Agent for get_nbo; model qwen2.5:7b by default)
+  WebRTC: browser-native RTCPeerConnection, signaling via CC-server WebSocket (no STUN/TURN)
+
+  ## Directory Layout
+  app/<Subsystem>/<Module>-server/src/   — FastAPI source
+  app/<Subsystem>/<Module>-server/test/  — pytest tests
+  app/<Subsystem>/<Module>-gui/src/      — Vue 3 source
+
+  ## Port Allocation (do not change)
+  CC-server: 8001 | CC-client-gui: 5172 | CC-gui: 5173
+  CRM-server: 8002 | CRM-gui: 5174
+  Billing-server: 8003 | Billing-gui: 5175
+  WebRTC signaling: ws://localhost:8001/ws/signal
+
+  ## Architecture Rules (never violate)
+  - CC-server is the ONLY orchestrator; CRM and Billing must NOT call each other
+  - No Python cross-imports between subsystems; contracts via A2A JSON Schema only
+  - Each GUI connects only to its own subsystem server
+  - All A2A and Ollama calls use httpx.AsyncClient; synchronous requests is forbidden
+  - All servers enable CORS
+  - Agent Card must be defined before implementing any Skill
+  - Each Skill has its own Pydantic InputModel / OutputModel
+
+  ## A2A Skills Registry
+  CRM /profiling/a2a    — query_customer  (TMF629/TMF637)
+  CRM /recommendation/a2a — get_nbo       (TMF701/TMF620/TMF637, LLM via Ollama)
+  CRM /order/a2a        — create_order    (TMF622)
+  Billing /usage/a2a    — query_bill      (TMF677/TMF678)
+
+  ## TMForum Alignment
+  Field names and status enums follow TMF Open API conventions (TMF620/622/629/637/677/701).
+  Currency unit: EUR. Date/time: ISO 8601. Order initial state: "acknowledged".
+
+  ## Code Standards
+  Python: PEP 8, type annotations mandatory, Pydantic Field(description="...") on all fields
+  Vue: <script setup lang="ts">, PascalCase components, API calls in src/api/
+  No hardcoded URLs — use env vars or config constants
+  All httpx calls must set timeout (A2A: 10.0s, Ollama: 30.0s)
+
+rules:
+  proposal:
+    - State which subsystem(s) are affected and whether CC orchestration changes are required
+    - Include a "Non-goals" section to bound scope
+    - Note any TMForum API alignment implications
+    - Keep under 400 words
+
+  design:
+    - Identify all A2A skill schemas that change and show before/after JSON Schema diff
+    - Specify Ollama prompt template if get_nbo is involved
+    - Confirm no cross-subsystem Python imports are introduced
+    - Include fallback behavior for any external dependency (Ollama, downstream A2A call)
+
+  tasks:
+    - Order tasks: Agent Card → Pydantic models → skill logic → router → seed data → tests
+    - Each task must be independently testable and completable in one sitting
+    - Include a task for updating openspec/specs/<domain>/spec.md when contracts change
+    - Flag tasks that touch CC-server orchestration separately
+
+  spec:
+    - Use SHALL / SHOULD / MAY for requirement strength
+    - Every Scenario must follow Given / When / Then format
+    - Include JSON examples for all A2A request and response payloads
+    - TMForum field mapping table required for any new or changed skill
