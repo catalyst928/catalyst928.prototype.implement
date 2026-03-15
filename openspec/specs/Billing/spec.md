@@ -66,6 +66,26 @@ The Billing subsystem is a single FastAPI process (port 8003) hosting one named 
 
 ---
 
+## Data Model
+
+### SQLite Database (Billing-server)
+
+#### `bills` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Bill record ID |
+| `customer_id` | TEXT UNIQUE | FK reference to customer |
+| `bucket_balance` | REAL | Remaining account balance (TMF677 `bucket[usageType=balance].remainingValue.amount`) |
+| `bucket_balance_unit` | TEXT | Currency unit (e.g. `EUR`) |
+| `due_date` | TEXT | Payment due date (`YYYY-MM-DD`, TMF678 `CustomerBill.paymentDueDate`) |
+| `bill_amount` | REAL | Total bill amount due (TMF678 `CustomerBill.amountDue.value`) |
+| `bill_amount_unit` | TEXT | Currency unit (e.g. `EUR`) |
+| `plan_usage_pct` | INTEGER | Data usage percentage `0–100` (TMF677 derived) |
+
+> **Note:** `plan_usage_pct` is stored directly in the `bills` table for simplicity. In a production TMF677 implementation this would be derived from usage bucket data.
+
+---
+
 ## Scenarios
 
 ### Scenario: Query bill for existing customer

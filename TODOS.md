@@ -27,13 +27,6 @@
 
 ## Infrastructure
 
-### Docker Compose — One-Command Startup
-**Priority:** P1
-**What:** Create `docker-compose.yml` at the repo root to replace the current 8-terminal-window startup. Services: `ollama` (with health check), `model-init` (runs `ollama pull qwen2.5:7b`, exits), `cc-server`, `crm-server`, `billing-server` (all depend-on `model-init` completing), plus 4 Vue GUI services (Vite dev or nginx).
-**Why:** Current startup requires: `ollama serve` + `ollama pull qwen2.5:7b` + 3× `uv run uvicorn` + 4× `npm run dev` = 8 terminal windows and manual ordering. For a demo project, this is the single biggest friction point. A bad first-run experience undermines the entire demo's message.
-**How to apply:** Add `docker-compose.yml` + per-service `Dockerfile`s. CRM-server `OLLAMA_BASE_URL` env var must point to `http://ollama:11434` inside Docker network. Update README Getting Started section to show `docker compose up` as the primary path, with manual startup as fallback.
-**Depends on:** None — can be added after initial implementation is working.
-
 ## Testing
 
 ### CC-Server End-to-End Orchestration Integration Test
@@ -75,3 +68,27 @@
 **Depends on:** CC-server initial implementation (sequential version working first).
 
 ## Completed
+
+### ✅ WS Message Envelope Discriminator (CC spec, P1)
+Added `### CC-server: WebSocket Message Envelope` section with 9 message types table and full envelope schemas for all `type` values.
+
+### ✅ Loading/Progress State Push During A2A Flow (CC spec, P1)
+Added `progress` push annotations to every step in the Business Flow Sequence. Added `progress` message type to the WS envelope section.
+
+### ✅ `/order/create` REST Endpoint Schema (CC spec, P1)
+Added `### CC-server: REST Endpoints` section with full request/response schemas for `POST /order/create` (success, identity failure, flow error cases).
+
+### ✅ Parallelize Steps 2 + 3.5 in CC-Server (CC spec, P3)
+Added spec note after step 3.5: implementations MAY use `asyncio.gather()` for concurrent execution.
+
+### ✅ Fallback Chain for All-Invalid LLM IDs in `get_nbo` (CRM spec, P2)
+Appended hallucinated-ID fallback sentence to the LLM Integration Fallback requirement.
+
+### ✅ SQLite Table Schemas — CRM (CRM spec, P2)
+Added `## Data Model` section with 5 tables: `customers`, `product_offerings`, `orders`, `identities`, `ai_models`.
+
+### ✅ SQLite Table Schemas — Billing (Billing spec, P2)
+Added `## Data Model` section with `bills` table.
+
+### ✅ Docker Compose — One-Command Startup (project.md, P1)
+Added `## Getting Started` section to `openspec/project.md` specifying all 9 compose services, dependency ordering, env vars, Dockerfile templates, and manual startup fallback.

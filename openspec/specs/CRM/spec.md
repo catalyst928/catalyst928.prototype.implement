@@ -128,7 +128,7 @@ The CRM subsystem is a single FastAPI process (port 8002) hosting four named A2A
 - The system SHALL request `"stream": false` from Ollama and parse the `response` field as JSON
 - The system SHALL extract a JSON array from the LLM response using a regex fallback if the response contains extra prose
 - The system SHALL filter out any `offering_id` that matches the customer's currently subscribed product (TMF637 inventory exclusion)
-- **Fallback:** If the Ollama call fails (connection error, timeout, or unparseable response), the system SHALL fall back to returning all eligible offerings ordered by price ascending, and SHALL log a warning
+- **Fallback:** If the Ollama call fails (connection error, timeout, or unparseable response), the system SHALL fall back to returning all eligible offerings ordered by price ascending, and SHALL log a warning. Additionally, if the Ollama response is successfully parsed but all returned offering IDs fail the ProductOffering inventory filter (i.e. all IDs are invalid or hallucinated), the system SHALL fall back to price-sorted offerings as if Ollama were unreachable, ensuring `recommendation_item[]` always contains at least one item.
 - The system SHALL NOT expose Ollama errors to the A2A caller; all errors surface as the fallback result or as a `-32001` error only when `customer_id` is invalid
 
 #### Prompt Template
@@ -179,6 +179,60 @@ Do not include any explanation.
 - The system SHALL pre-seed an NBO recommendation pool of at least 3 `ProductOffering` options
 - `ProductOffering` seed data SHALL include `id`, `name`, `description`, `price`, `price_unit` fields — these are passed verbatim in the Ollama prompt
 - All seed data SHALL be loaded via `seed.py` on service startup
+
+---
+
+## Data Model
+
+### SQLite Database (CRM-server)
+
+#### `customers` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Customer ID (TMF629 `Customer.id`) |
+| `phone` | TEXT UNIQUE | Phone number (TMF629 contactMedium) |
+| `name` | TEXT | Customer name |
+| `customer_category` | TEXT | `gold` \| `silver` \| `bronze` |
+| `product_name` | TEXT | Currently subscribed plan (TMF637 `Product.name`) |
+
+#### `product_offerings` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Offering ID (TMF620 `ProductOffering.id`) |
+| `name` | TEXT | Offering name |
+| `description` | TEXT | Offering description |
+| `price` | REAL | Price value |
+| `price_unit` | TEXT | Currency unit (e.g. `EUR`) |
+
+#### `orders` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Order ID (TMF622 `ProductOrder.id`) |
+| `customer_id` | TEXT | FK → `customers.id` |
+| `offering_id` | TEXT | FK → `product_offerings.id` |
+| `state` | TEXT | `acknowledged` \| `inProgress` \| `completed` |
+| `order_date` | TEXT | ISO 8601 timestamp |
+
+#### `identities` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Identity ID (TMF720 `DigitalIdentity.id`) |
+| `customer_id` | TEXT | FK → `customers.id` |
+| `verified` | INTEGER | `1` = verified, `0` = failed |
+| `confidence_score` | REAL | 0.0–1.0 (TMF720 `DigitalIdentity.characteristic[name=confidence].value`) |
+| `verified_at` | TEXT | ISO 8601 timestamp (TMF720 `DigitalIdentity.validFor.startDateTime`) |
+
+#### `ai_models` table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PRIMARY KEY | Model ID (TMF915 `AIModel.id`) |
+| `model_name` | TEXT | Model name (e.g. `qwen2.5:7b`) |
+| `version` | TEXT | Model version string |
+| `status` | TEXT | `active` \| `inactive` \| `training` (TMF915 `AIModel.lifecycleStatus`) |
+| `accuracy_score` | REAL | 0.0–1.0 (TMF915 `AIModel.characteristic[name=accuracy].value`) |
+| `last_updated` | TEXT | ISO 8601 timestamp (TMF915 `AIModel.lastUpdate`) |
+
+> **Note:** `recommendations` and `recommendation_items` are not persisted — they are generated per call by Ollama and exist only in the response payload.
 
 ---
 

@@ -81,19 +81,145 @@ CC-server aggregates data from CRM and Billing skills. The aggregated session pa
 - On receiving a `call-start` message, the system SHALL extract the caller's `phone` number and initiate the A2A business flow
 - The system SHALL NOT configure any STUN or TURN servers — demo uses direct WebRTC connection only
 
+### CC-server: WebSocket Message Envelope
+
+All messages over `ws://localhost:8001/ws/signal` SHALL include a `type` field as the top-level discriminator. The `type` field determines how CC-server, CC-client, and CC-gui route and handle the message.
+
+#### Message Type Reference
+
+| `type` | Direction | Description |
+|--------|-----------|-------------|
+| `offer` | CC-client → CC-server → CC-gui | WebRTC SDP offer |
+| `answer` | CC-gui → CC-server → CC-client | WebRTC SDP answer |
+| `ice-candidate` | CC-client ↔ CC-server ↔ CC-gui | ICE candidate relay |
+| `call-start` | CC-client → CC-server | Call initiated; triggers A2A business flow |
+| `call-end` | CC-client → CC-server → CC-gui | Call terminated |
+| `progress` | CC-server → CC-gui | A2A flow step status update |
+| `business_payload` | CC-server → CC-gui | Aggregated A2A result (customer + bill + nbo) |
+| `order_result` | CC-server → CC-gui | Order placement + notification result |
+| `error` | CC-server → CC-gui | Flow failure notification |
+
+#### Envelope Schemas
+
+**Signaling messages** (`offer`, `answer`, `ice-candidate`, `call-start`, `call-end`) carry their payload under a `data` key:
+```json
+{ "type": "offer", "data": { "sdp": "..." } }
+{ "type": "call-start", "data": { "phone": "13800000001" } }
+{ "type": "ice-candidate", "data": { "candidate": "..." } }
+```
+
+**`progress` message** — emitted by CC-server before and after each A2A step:
+```json
+{ "type": "progress", "step": "query_customer", "status": "running" }
+{ "type": "progress", "step": "query_customer", "status": "done" }
+```
+Valid `step` values: `query_customer`, `query_bill`, `get_ai_model_status`, `get_nbo`, `verify_identity`, `create_order`, `send_notification`
+
+**`business_payload` message** — emitted after `get_nbo` completes (step 4):
+```json
+{
+  "type": "business_payload",
+  "data": {
+    "customer": { "id": "...", "name": "...", "customer_category": "...", "product_name": "..." },
+    "bill": { "bucket_balance": 35.50, "bucket_balance_unit": "EUR", "due_date": "2026-04-05", "bill_amount": 99.00, "bill_amount_unit": "EUR", "plan_usage_pct": 72 },
+    "nbo": { "id": "...", "recommendation_item": [ "..." ] },
+    "nbo_fallback": false,
+    "nbo_fallback_reason": null
+  }
+}
+```
+
+**`order_result` message** — emitted after `send_notification` completes:
+```json
+{
+  "type": "order_result",
+  "data": {
+    "order": { "order_id": "...", "state": "acknowledged", "order_date": "..." },
+    "notification": { "message_id": "...", "status": "sent", "sent_at": "..." }
+  }
+}
+```
+
+**`error` message** — emitted when a flow step fails unrecoverably:
+```json
+{ "type": "error", "step": "query_customer", "code": -32001, "message": "Customer not found" }
+```
+
 ### CC-server: Business Flow Sequence
 1. Receive `call-start` event from CC-client via WebSocket with `{ "phone": "..." }`
+   → push `{ "type": "progress", "step": "query_customer", "status": "running" }` to CC-gui
 2. Call **Profiling Agent** (`POST http://localhost:8002/profiling/a2a`) `skill=query_customer` with `{ "phone" }` → receive `customer_id`, `name`, `customer_category` (TMF629), `product_name` (TMF637)
+   → push `{ "type": "progress", "step": "query_customer", "status": "done" }` to CC-gui
+   → push `{ "type": "progress", "step": "query_bill", "status": "running" }` to CC-gui
 3. Call **Usage Agent** (`POST http://localhost:8003/usage/a2a`) `skill=query_bill` with `{ "customer_id" }` → receive `bucket_balance`, `bucket_balance_unit`, `due_date`, `bill_amount`, `bill_amount_unit`, `plan_usage_pct` (TMF677/678)
-3.5. *(Optional)* Call **AI Management Agent** (`POST http://localhost:8002/ai-management/a2a`) `skill=get_ai_model_status` with `{ "model_id": "<nbo_model_id>" }` → receive `status` (TMF915 `AIModel`). If `status == "inactive"`, set `nbo_fallback=true` flag; otherwise proceed normally
-4. Call **Recommendation Agent** (`POST http://localhost:8002/recommendation/a2a`) `skill=get_nbo` with `{ "customer_id" }` (or `{ "customer_id", "fallback": true }` if `nbo_fallback=true`) → receive TMF701 `Recommendation` object (`id` + `recommendation_item[]` ordered by priority)
-5. Push aggregated `{ customer, bill, nbo }` payload to CC-gui (include `nbo_fallback` flag if set)
-6. On agent selection of an offer: receive `POST /order/create { customer_id, offer_id }` from CC-gui
-6.5. Call **Profiling Agent** (`POST http://localhost:8002/profiling/a2a`) `skill=verify_identity` with `{ "customer_id", "verification_method": "otp" }` → receive TMF720 `DigitalIdentity` status. If `verified == false`, return identity verification failure to CC-gui and abort order placement
-7. Call **Order Agent** (`POST http://localhost:8002/order/a2a`) `skill=create_order` with `{ customer_id, offer_id }` → receive `order_id`, `state: "acknowledged"`, `order_date` (TMF622)
-8. Return order confirmation to CC-gui
-9. Call **Communication Agent** (`POST http://localhost:8001/communication/a2a`) `skill=send_notification` with `{ "customer_id", "channel", "message" }` → receive `message_id`, `status`, `sent_at` (TMF681 `CommunicationMessage`)
-10. Push notification status `{ message_id, status, sent_at }` to CC-gui
+   → push `{ "type": "progress", "step": "query_bill", "status": "done" }` to CC-gui
+3.5. *(Optional)* push `{ "type": "progress", "step": "get_ai_model_status", "status": "running" }` to CC-gui; Call **AI Management Agent** (`POST http://localhost:8002/ai-management/a2a`) `skill=get_ai_model_status` with `{ "model_id": "<nbo_model_id>" }` → receive `status` (TMF915 `AIModel`). If `status == "inactive"`, set `nbo_fallback=true`, `nbo_fallback_reason="model_inactive"`; push `{ "type": "progress", "step": "get_ai_model_status", "status": "done" }` to CC-gui
+
+> **Note:** Steps 3 (`query_bill`) and 3.5 (`get_ai_model_status`) are independent — both depend only on `customer_id` from step 2. Implementations MAY execute them concurrently via `asyncio.gather()` to reduce total latency before the Ollama call.
+
+4. push `{ "type": "progress", "step": "get_nbo", "status": "running" }` to CC-gui; Call **Recommendation Agent** (`POST http://localhost:8002/recommendation/a2a`) `skill=get_nbo` with `{ "customer_id" }` (or `{ "customer_id", "fallback": true }` if `nbo_fallback=true`) → receive TMF701 `Recommendation` object (`id` + `recommendation_item[]` ordered by priority). If Recommendation Agent used Ollama fallback internally, it sets `nbo_fallback=true`, `nbo_fallback_reason="ollama_unavailable"` in its response.
+   → push `{ "type": "progress", "step": "get_nbo", "status": "done" }` to CC-gui
+   → push `business_payload` message (see envelope schema above) to CC-gui
+5. On agent selection of an offer: receive `POST /order/create { customer_id, offer_id }` from CC-gui
+6. push `{ "type": "progress", "step": "verify_identity", "status": "running" }` to CC-gui; Call **Profiling Agent** (`POST http://localhost:8002/profiling/a2a`) `skill=verify_identity` with `{ "customer_id", "verification_method": "otp" }` → receive TMF720 `DigitalIdentity` status. If `verified == false`, return identity verification failure to CC-gui and abort order placement
+7. push `{ "type": "progress", "step": "create_order", "status": "running" }` to CC-gui; Call **Order Agent** (`POST http://localhost:8002/order/a2a`) `skill=create_order` with `{ customer_id, offer_id }` → receive `order_id`, `state: "acknowledged"`, `order_date` (TMF622)
+8. push `{ "type": "progress", "step": "send_notification", "status": "running" }` to CC-gui; Call **Communication Agent** (`POST http://localhost:8001/communication/a2a`) `skill=send_notification` with `{ "customer_id", "channel", "message" }` → receive `message_id`, `status`, `sent_at` (TMF681 `CommunicationMessage`)
+   → push `order_result` message (see envelope schema above) to CC-gui
+
+### CC-server: REST Endpoints
+
+#### POST /order/create
+
+Triggered by CC-gui when the agent selects an NBO offer and places an order.
+
+**Request Body:**
+```json
+{
+  "customer_id": "string (TMF622 ProductOrder.relatedParty[role=customer].id)",
+  "offer_id": "string (TMF620 ProductOffering.id)"
+}
+```
+
+**Response — Success (HTTP 200):**
+```json
+{
+  "order": {
+    "order_id": "string (TMF622 ProductOrder.id)",
+    "state": "acknowledged",
+    "order_date": "string (ISO 8601)"
+  },
+  "notification": {
+    "message_id": "string (TMF681 CommunicationMessage.id)",
+    "status": "sent | failed",
+    "sent_at": "string (ISO 8601)"
+  }
+}
+```
+
+**Response — Identity Verification Failure (HTTP 200 with error body):**
+```json
+{
+  "error": {
+    "code": -32001,
+    "message": "Identity verification failed",
+    "step": "verify_identity"
+  }
+}
+```
+
+**Response — Flow Error (HTTP 200 with error body):**
+```json
+{
+  "error": {
+    "code": -32000,
+    "message": "string",
+    "step": "string (name of the A2A step that failed)"
+  }
+}
+```
+
+- The system SHALL call `verify_identity` before `create_order`; if `verified == false`, return the identity failure response and abort
+- The system SHALL always attempt `send_notification` after a successful `create_order`; a notification failure (`status: "failed"`) SHALL NOT roll back the order
 
 ### CC-client (Vue 3 GUI — WebRTC Caller)
 - The client SHALL be a Vue 3 frontend GUI accessible at port 5172

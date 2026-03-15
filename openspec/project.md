@@ -226,6 +226,107 @@ A2A Skill interfaces are designed to align with **TM Forum Open API** data model
 
 ---
 
+## Getting Started
+
+### One-Command Startup (Docker Compose)
+
+The primary startup path uses Docker Compose. A `docker-compose.yml` SHALL exist at the repository root, defining all services with correct dependency ordering.
+
+```
+docker compose up
+```
+
+#### Services
+
+| Service | Build Context | Exposed Port | Depends On |
+|---------|--------------|--------------|------------|
+| `ollama` | `ollama/ollama` (image) | 11434 | — |
+| `model-init` | `ollama/ollama` (image) | — | `ollama` (healthy) |
+| `cc-server` | `./app/CC/CC-server` | 8001 | `model-init` (completed) |
+| `crm-server` | `./app/CRM/CRM-server` | 8002 | `model-init` (completed) |
+| `billing-server` | `./app/Billing/Billing-server` | 8003 | `model-init` (completed) |
+| `cc-client` | `./app/CC/CC-client` | 5172 | `cc-server` |
+| `cc-gui` | `./app/CC/CC-gui` | 5173 | `cc-server` |
+| `crm-gui` | `./app/CRM/CRM-gui` | 5174 | `crm-server` |
+| `billing-gui` | `./app/Billing/Billing-gui` | 5175 | `billing-server` |
+
+#### Service Specifications
+
+**`ollama`**
+- Image: `ollama/ollama`
+- Volume: named volume `ollama_data` → `/root/.ollama` (model persistence across restarts)
+- Health check: `ollama list` exits 0; interval 10s, retries 5
+
+**`model-init`**
+- Image: `ollama/ollama`
+- Command: `ollama pull qwen2.5:7b`
+- `restart: on-failure` — exits 0 on success; compose marks it `service_completed_successfully`
+- Environment: `OLLAMA_HOST=http://ollama:11434`
+- Depends on: `ollama` condition `service_healthy`
+
+**Backend servers (`cc-server`, `crm-server`, `billing-server`)**
+- Each built from a `Dockerfile` at its service directory root
+- Depend on: `model-init` condition `service_completed_successfully`
+- `crm-server` MUST set `OLLAMA_BASE_URL=http://ollama:11434` — the only env var that differs between Docker and manual startup; all other servers do not call Ollama directly
+
+**Frontend services (`cc-client`, `cc-gui`, `crm-gui`, `billing-gui`)**
+- Each built from a `Dockerfile` at its GUI directory root
+- Run Vite dev server: `npm run dev -- --host 0.0.0.0 --port <port>`
+- Each GUI's backend API base URL MUST be configurable via `VITE_API_BASE_URL` build-time env var, passed as a Docker build arg
+
+#### Dockerfile Templates
+
+**Backend (FastAPI + uv):**
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install uv
+COPY pyproject.toml .
+RUN uv sync
+COPY . .
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "<port>"]
+```
+
+**Frontend (Vue 3 + Vite):**
+```dockerfile
+FROM node:20-slim
+WORKDIR /app
+COPY package*.json .
+RUN npm install
+COPY . .
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+EXPOSE <port>
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "<port>"]
+```
+
+---
+
+### Manual Startup (Fallback)
+
+For environments where Docker is unavailable:
+
+```bash
+# 1. Start Ollama and pull model
+ollama serve &
+ollama pull qwen2.5:7b
+
+# 2. Start backend servers (3 terminals)
+cd app/CC/CC-server           && uv run uvicorn main:app --port 8001
+cd app/CRM/CRM-server         && uv run uvicorn main:app --port 8002
+cd app/Billing/Billing-server && uv run uvicorn main:app --port 8003
+
+# 3. Start frontend GUIs (4 terminals)
+cd app/CC/CC-client       && npm run dev
+cd app/CC/CC-gui          && npm run dev
+cd app/CRM/CRM-gui        && npm run dev
+cd app/Billing/Billing-gui && npm run dev
+```
+
+> In manual mode, `crm-server` reads `OLLAMA_BASE_URL` from environment (default: `http://localhost:11434`). No override needed for localhost startup.
+
+---
+
 ## Development Guidelines
 
 1. **Define the Agent Card first**, then implement Skill logic — contract before code
