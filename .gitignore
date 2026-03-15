@@ -56,3 +56,6 @@ Desktop.ini
 
 # ── Claude ───────────────────────────────────────────────────────
 # .claude/
+.claude/settings.local.json
+.vscode/
+.python-version
