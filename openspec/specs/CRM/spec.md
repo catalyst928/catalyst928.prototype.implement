@@ -62,7 +62,7 @@ The CRM subsystem is a single FastAPI process (port 8002) hosting four named A2A
 | `verification_method` (input) | `DigitalIdentity` | `DigitalIdentity.identityType` (enum: `otp`, `biometric`, `knowledge`) |
 | `identity_id` | `DigitalIdentity` | `DigitalIdentity.id` |
 | `verified` | `DigitalIdentity` | `DigitalIdentity.status` mapped to boolean (`active` → `true`, else `false`) |
-| `confidence_score` | `DigitalIdentity` | `DigitalIdentity.validFor` derived confidence metric (0.0–1.0) |
+| `confidence_score` | `DigitalIdentity` | `DigitalIdentity.characteristic[name=confidence].value` (0.0–1.0) |
 | `verified_at` | `DigitalIdentity` | `DigitalIdentity.validFor.startDateTime` (ISO 8601) |
 
 ### Skill: `get_ai_model_status` — TMF915 AI Management
@@ -299,7 +299,7 @@ Do not include any explanation.
     "properties": {
       "identity_id":      { "type": "string",  "description": "TMF720 DigitalIdentity.id" },
       "verified":         { "type": "boolean", "description": "true if identity check passes (TMF720 DigitalIdentity.status == active)" },
-      "confidence_score": { "type": "number",  "description": "Confidence score 0.0–1.0 (TMF720 DigitalIdentity.validFor derived metric)", "minimum": 0.0, "maximum": 1.0 },
+      "confidence_score": { "type": "number",  "description": "Confidence score 0.0–1.0 (TMF720 DigitalIdentity.characteristic[name=confidence].value)", "minimum": 0.0, "maximum": 1.0 },
       "verified_at":      { "type": "string",  "description": "TMF720 DigitalIdentity.validFor.startDateTime (ISO 8601)", "format": "date-time" }
     },
     "required": ["identity_id", "verified", "confidence_score", "verified_at"]

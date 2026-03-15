@@ -35,6 +35,8 @@ CC-server aggregates data from CRM and Billing skills. The aggregated session pa
 | `nbo.recommendation_item[].description` | `get_nbo` | TMF620 `ProductOffering.description` |
 | `nbo.recommendation_item[].price` | `get_nbo` | TMF620 `ProductOffering.productOfferingPrice[0].price.value` |
 | `nbo.recommendation_item[].price_unit` | `get_nbo` | TMF620 `ProductOffering.productOfferingPrice[0].price.unit` |
+| `nbo_fallback` | CC-server internal | `true` if NBO recommendations are from the fallback path |
+| `nbo_fallback_reason` | CC-server internal | `"model_inactive"` (Step 3.5: TMF915 status inactive) \| `"ollama_unavailable"` (Recommendation Agent: Ollama unreachable at runtime). Only present when `nbo_fallback=true` |
 
 ### Order Request (CC-gui → CC-server)
 
@@ -154,7 +156,7 @@ CC-server aggregates data from CRM and Billing skills. The aggregated session pa
   - Customer profile: `name`, `customer_category`, `product_name`
   - Bill summary: `bucket_balance`, `due_date`, `bill_amount`, `plan_usage_pct`
   - NBO list: `recommendation_item[]` ordered by `priority`, each showing `name`, `description`, `price`, `price_unit`
-  - When `nbo_fallback=true` is set in the payload, display an "AI model unavailable – fallback used" notice
+  - When `nbo_fallback=true` is set in the payload, display a fallback notice whose text is driven by `nbo_fallback_reason`: `"model_inactive"` → "AI model inactive – fallback used"; `"ollama_unavailable"` → "NBO engine unavailable – fallback used"
 - The GUI SHALL allow the agent to select a recommendation and trigger order placement via `POST /order/create { customer_id, offer_id }`
 - The GUI SHALL display an identity verification failure notice if `verify_identity` returns `verified == false`
 - The GUI SHALL display the order confirmation: `order_id`, `state`, `order_date`
@@ -216,7 +218,7 @@ CC-server aggregates data from CRM and Billing skills. The aggregated session pa
 ### Scenario: NBO AI model unavailable — fallback used
 - Given: AI Management Agent returns `{ "status": "inactive" }` for the NBO model
 - When: CC-server calls `AI Management Agent` at step 3.5
-- Then: CC-server sets `nbo_fallback=true` and calls `Recommendation Agent` for price-sorted fallback recommendations; CC-gui displays an "AI model unavailable – fallback used" notice alongside the NBO list
+- Then: CC-server sets `nbo_fallback=true`, `nbo_fallback_reason="model_inactive"` and calls `Recommendation Agent` for price-sorted fallback recommendations; CC-gui displays an "AI model inactive – fallback used" notice alongside the NBO list
 
 ### Scenario: CRM service unavailable during flow
 - Given: CRM-server is down

@@ -232,7 +232,7 @@ Orchestrates the following flow internally:
 3. On WebRTC call established: trigger A2A business flow with phone number from CC-client
 4. Call `Profiling Agent` → get customer profile
 5. Call `Usage Agent` → get bill summary
-5.5. *(Optional)* Call `AI Management Agent` → check NBO model health; set `nbo_fallback=true` if `status == "inactive"`
+5.5. *(Optional)* Call `AI Management Agent` → check NBO model health; set `nbo_fallback=true, nbo_fallback_reason="model_inactive"` if `status == "inactive"`. If Recommendation Agent falls back due to Ollama unavailability, it sets `nbo_fallback=true, nbo_fallback_reason="ollama_unavailable"` in the response.
 6. Call `Recommendation Agent` → get NBO recommendations (fallback mode if `nbo_fallback=true`)
 7. On agent selection of offer: call `Profiling Agent` (`verify_identity`) → verify customer identity; abort if `verified == false`
 8. Call `Order Agent` → confirm order

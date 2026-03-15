@@ -221,6 +221,21 @@ This project uses **OpenSpec spec-driven development**. All changes should go th
 - Read [`openspec/project.md`](openspec/project.md) for the full system overview and TMForum alignment tables.
 - Use `/opsx:propose`, `/opsx:apply`, and `/opsx:archive` to manage changes (see `AGENTS.md` for details).
 
+### Spec Annotation Tags
+
+Markdown files in `openspec/` support inline annotation tags processed by Claude Code (see [`CLAUDE.md`](CLAUDE.md)):
+
+| Tag | Action |
+|-----|--------|
+| `@claude: <instruction>` | Execute the instruction at that location |
+| `@revise: <requirement>` | Rewrite the adjacent paragraph to meet the requirement |
+| `@expand: <direction>` | Expand and elaborate on the adjacent content |
+| `@delete` | Remove the annotated content block entirely |
+| `@todo` | Mark as incomplete — prompts for input before proceeding |
+| `@discuss: <question>` | Pause for analysis and options before editing |
+| `@keep` | Do not modify this content under any circumstance |
+| `@note: <remark>` | Informational only — preserved, no modification triggered |
+
 ### Demo seed data
 
 Each server seeds its SQLite database at startup with 3 test customers:
