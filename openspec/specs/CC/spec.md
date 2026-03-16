@@ -70,7 +70,7 @@ CC-server aggregates data from CRM and Billing skills. The aggregated session pa
 - The system SHALL orchestrate calls to CRM-server and Billing-server in sequence via A2A
 - The system SHALL aggregate all subsystem results and return them to CC-gui using TMF-aligned field names
 - The system SHALL NOT be called by CRM-server or Billing-server
-- The system SHALL use `httpx.AsyncClient` with `timeout=10.0` for all outbound A2A calls
+- The system SHALL use the `a2a-python` SDK client for all outbound A2A calls (do NOT manually construct JSON-RPC envelopes or use raw `httpx` for A2A)
 - The system SHALL enable CORS on all endpoints to allow local GUI access
 - The system SHALL handle A2A call failures gracefully and return a standard JSON-RPC error object
 

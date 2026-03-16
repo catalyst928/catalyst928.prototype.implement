@@ -12,6 +12,99 @@ A customer calls in via WebRTC. CC-server receives the call event and orchestrat
 
 ## Architecture
 
+### Logical Component Diagram
+
+![Architecture Diagram](docs/architecture.jpg)
+
+<details>
+<summary>ASCII version (click to expand)</summary>
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      CC (Call Center)                                   │
+│                                                                                         │
+│  ┌──────────────────────┐   WebSocket   ┌──────────────────────────────────────────┐    │
+│  │  CC-client  :5172    │──signaling───▶│  CC-server  :8001                        │    │
+│  │  (Customer Caller)   │               │                                          │    │
+│  │                      │               │  ┌─────────────────────┐                 │    │
+│  │  DialerView          │               │  │ WebSocket Signaling │ /ws/signal      │    │
+│  │   ├─ DialPad         │               │  │ (offer/answer/ICE/  │                 │    │
+│  │   ├─ CallStatus      │               │  │  call-start/end)    │                 │    │
+│  │   └─ VideoStream     │               │  └─────────────────────┘                 │    │
+│  │                      │               │  ┌─────────────────────┐                 │    │
+│  │  useWebRTC composable│               │  │ A2A Orchestrator    │                 │    │
+│  │  signaling.ts (WS)   │               │  │ (business flow      │                 │    │
+│  │  callStore (Pinia)   │               │  │  sequencer)         │                 │    │
+│  └──────────────────────┘               │  └─────────────────────┘                 │    │
+│                                         │  ┌─────────────────────┐                 │    │
+│  ┌──────────────────────┐               │  │ Communication Agent │ /communication  │    │
+│  │  CC-gui  :5173       │◀──WS push─────│  │ skill:              │                 │    │
+│  │  (Agent Dashboard)   │               │  │  send_notification  │                 │    │
+│  │                      │  POST /order/ │  └─────────────────────┘                 │    │
+│  │  CustomerInfo panel  │───create─────▶│  ┌─────────────────────┐                 │    │
+│  │  BillSummary panel   │               │  │ REST: POST          │                 │    │
+│  │  NBO list + fallback │               │  │  /order/create      │                 │    │
+│  │  OrderConfirmation   │               │  └─────────────────────┘                 │    │
+│  │  NotificationStatus  │               │                                          │    │
+│  │                      │               │  a2a-python SDK client                   │    │
+│  │  useWebRTC composable│               │  (all outbound A2A calls)                │    │
+│  │  signaling.ts (WS)   │               └───────────┬──────────┬──────────────────┘    │
+│  │  callStore (Pinia)   │                           │          │                        │
+│  └──────────────────────┘                           │          │                        │
+└─────────────────────────────────────────────────────┼──────────┼────────────────────────┘
+                                                      │          │
+                          A2A (JSON-RPC 2.0 / HTTP)   │          │  A2A (JSON-RPC 2.0)
+                    ┌─────────────────────────────────┘          └──────────────┐
+                    ▼                                                           ▼
+┌───────────────────────────────────────────────────┐  ┌────────────────────────────────┐
+│              CRM-server  :8002                     │  │    Billing-server  :8003       │
+│                                                    │  │                                │
+│  ┌──────────────────────────────┐                  │  │  ┌──────────────────────────┐  │
+│  │ Profiling Agent  /profiling  │                  │  │  │ Usage Agent  /usage      │  │
+│  │ skills:                      │                  │  │  │ skill:                   │  │
+│  │  query_customer  (TMF629)    │                  │  │  │  query_bill  (TMF677/678)│  │
+│  │  verify_identity (TMF720)    │                  │  │  └──────────────────────────┘  │
+│  └──────────────────────────────┘                  │  │                                │
+│  ┌──────────────────────────────┐                  │  │  SQLite: bills                 │
+│  │ Recommendation Agent         │                  │  │  seed.py (auto-init)           │
+│  │  /recommendation             │                  │  │                                │
+│  │ skill:                       │  ┌────────────┐  │  │  a2a-python SDK server         │
+│  │  get_nbo (TMF701/620/637)  ──┼─▶│  Ollama    │  │  │  (agent card + JSON-RPC)      │
+│  │  (LLM ranking + fallback)    │  │ or else    │  │  └────────────────────────────────┘
+│  └──────────────────────────────┘  └────────────┘  │
+│  ┌──────────────────────────────┐                  │         ┌────────────────────────┐
+│  │ Order Agent  /order          │                  │         │  Billing-gui  :5175    │
+│  │ skill:                       │                  │         │  Bill details &        │
+│  │  create_order (TMF622)       │                  │         │  consumption breakdown │
+│  └──────────────────────────────┘                  │         │  (Vue 3 + Element Plus)│
+│  ┌──────────────────────────────┐                  │         └────────────────────────┘
+│  │ AI Management Agent          │                  │
+│  │  /ai-management              │                  │
+│  │ skill:                       │                  │
+│  │  get_ai_model_status (TMF915)│                  │
+│  └──────────────────────────────┘                  │
+│                                                    │
+│  SQLite: customers, product_offerings,             │
+│          orders, identities, ai_models             │
+│  seed.py (auto-init)                               │
+│                                                    │
+│  a2a-python SDK server                             │
+│  (agent cards + JSON-RPC dispatch)                 │
+└────────────────────────────────────────────────────┘
+         │
+         ▼
+┌────────────────────────┐
+│  CRM-gui  :5174        │
+│  Customer 360 view     │
+│  (profile + orders)    │
+│  (Vue 3 + Element Plus)│
+└────────────────────────┘
+```
+
+</details>
+
+### A2A Business Flow
+
 ```
 [CC-client] — WebRTC offer/answer + call-start event
       │
@@ -197,7 +290,7 @@ Skill interfaces align with TM Forum Open API data models (TMF620, TMF622, TMF62
 |---|---|
 | Backend language | Python 3.11+ |
 | Backend framework | FastAPI |
-| A2A protocol | Google A2A SDK (JSON-RPC 2.0 over HTTP) |
+| A2A protocol | `a2a-python` SDK library (JSON-RPC 2.0 over HTTP) — agent card serving, skill registration, JSON-RPC dispatch, and A2A client calls |
 | LLM backend | Ollama (`qwen2.5:7b`) |
 | Data store | SQLite (per subsystem, demo only) |
 | Async HTTP client | httpx (AsyncClient) |
@@ -245,3 +338,10 @@ Each server seeds its SQLite database at startup with 3 test customers:
 | `13800000001` | Customer A | Plan-50G |
 | `13800000002` | Customer B | Plan-100G |
 | `13800000003` | Customer C | Plan-200G |
+
+### Screenshots Demo for CC-client / CC-gui
+
+| CC-client (Mobile — Customer Caller) | CC-gui (Desktop — Agent Dashboard) |
+|:---:|:---:|
+| <img src="docs/cc-client-mobile.jpg" width="260" /> | <img src="docs/cc-gui-desktop.jpg" width="600" /> |
+

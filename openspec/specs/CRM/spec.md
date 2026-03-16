@@ -83,12 +83,12 @@ The CRM subsystem is a single FastAPI process (port 8002) hosting four named A2A
 
 ### General
 - The system SHALL run as a single FastAPI process on port 8002
-- Each agent router SHALL be mounted at its respective prefix (`/profiling`, `/recommendation`, `/order`)
-- Each agent SHALL expose its own Agent Card at `GET /<prefix>/.well-known/agent.json`
-- Each agent SHALL accept A2A requests at `POST /<prefix>/a2a` using JSON-RPC 2.0 format
-- All agents SHALL return standard JSON-RPC error objects on all error conditions
+- Each agent SHALL be registered using the `a2a-python` SDK, which handles Agent Card serving (`GET /<prefix>/.well-known/agent.json`) and A2A endpoint (`POST /<prefix>/a2a`) with JSON-RPC 2.0 dispatch automatically
+- Do NOT manually implement JSON-RPC dispatch, Agent Card endpoints, or A2A request routing — import and use `a2a-python` SDK
+- All agents SHALL return standard JSON-RPC error objects on all error conditions (via `a2a-python` SDK error utilities)
 - The system SHALL enable CORS on all endpoints to allow local GUI access
 - The system SHALL NOT call CC-server or Billing-server directly
+- Dependencies SHALL be managed via `uv` + `pyproject.toml` (including `a2a-python` as a dependency)
 
 ### Profiling Agent (`/profiling`) — Skills: `query_customer`, `verify_identity`
 
@@ -108,7 +108,7 @@ The CRM subsystem is a single FastAPI process (port 8002) hosting four named A2A
 
 ### Recommendation Agent (`/recommendation`) — Skill: `get_nbo`
 
-> **Implementation note:** This agent uses an **LLM (Ollama) async call** to generate personalized NBO recommendations. The LLM ranks and selects from the seeded `ProductOffering` pool based on the customer's profile. All Ollama calls MUST be made with `httpx.AsyncClient` (no blocking I/O).
+> **Implementation note:** This agent uses an **LLM (Ollama) async call** to generate personalized NBO recommendations. The LLM ranks and selects from the seeded `ProductOffering` pool based on the customer's profile. Ollama calls MUST be made with `httpx.AsyncClient` (no blocking I/O). A2A skill registration and dispatch uses `a2a-python` SDK.
 
 - The system SHALL return a TMF701 `Recommendation` object for a given `customer_id`
 - The response SHALL include a top-level `id` (TMF701 `Recommendation.id`) and a `recommendation_item[]` array

@@ -34,12 +34,12 @@ The Billing subsystem is a single FastAPI process (port 8003) hosting one named 
 
 ### General
 - The system SHALL run as a single FastAPI process on port 8003
-- The Usage Agent router SHALL be mounted at prefix `/usage`
-- The Usage Agent SHALL expose its Agent Card at `GET /usage/.well-known/agent.json`
-- The Usage Agent SHALL accept A2A requests at `POST /usage/a2a` using JSON-RPC 2.0 format
-- The system SHALL return standard JSON-RPC error objects on all error conditions
+- The Usage Agent SHALL be registered using the `a2a-python` SDK, which handles Agent Card serving (`GET /usage/.well-known/agent.json`) and A2A endpoint (`POST /usage/a2a`) with JSON-RPC 2.0 dispatch automatically
+- Do NOT manually implement JSON-RPC dispatch, Agent Card endpoints, or A2A request routing — import and use `a2a-python` SDK
+- The system SHALL return standard JSON-RPC error objects on all error conditions (via `a2a-python` SDK error utilities)
 - The system SHALL enable CORS on all endpoints to allow local GUI access
 - The system SHALL NOT call CC-server or CRM-server directly
+- Dependencies SHALL be managed via `uv` + `pyproject.toml` (including `a2a-python` as a dependency)
 
 ### Usage Agent (`/usage`) — Skill: `query_bill`
 - The system SHALL return the current bill summary for a given `customer_id`

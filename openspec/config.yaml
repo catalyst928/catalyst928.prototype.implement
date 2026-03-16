@@ -6,7 +6,7 @@ context: |
   CC-server orchestrates CRM-server and Billing-server via A2A (JSON-RPC 2.0 over HTTP).
 
   ## Tech Stack
-  Backend: Python 3.11+, FastAPI, Google A2A SDK, SQLite, httpx (async), uv + pyproject.toml
+  Backend: Python 3.11+, FastAPI, a2a-python SDK (import and use, do NOT reimplement protocol), SQLite, httpx (async, for non-A2A calls only), uv + pyproject.toml
   Frontend: Vue 3 (Composition API), Vite, Element Plus, Pinia, Axios, TypeScript
   LLM backend: Ollama (used by CRM Recommendation Agent for get_nbo; model qwen2.5:7b by default)
   WebRTC: browser-native RTCPeerConnection, signaling via CC-server WebSocket (no STUN/TURN)
@@ -26,7 +26,8 @@ context: |
   - CC-server is the ONLY orchestrator; CRM and Billing must NOT call each other
   - No Python cross-imports between subsystems; contracts via A2A JSON Schema only
   - Each GUI connects only to its own subsystem server
-  - All A2A and Ollama calls use httpx.AsyncClient; synchronous requests is forbidden
+  - All A2A calls use a2a-python SDK; Ollama calls use httpx.AsyncClient; synchronous requests is forbidden
+  - Use uv for Python package management (uv add, uv sync, uv run); never pip install directly
   - All servers enable CORS
   - Agent Card must be defined before implementing any Skill
   - Each Skill has its own Pydantic InputModel / OutputModel
@@ -45,7 +46,7 @@ context: |
   Python: PEP 8, type annotations mandatory, Pydantic Field(description="...") on all fields
   Vue: <script setup lang="ts">, PascalCase components, API calls in src/api/
   No hardcoded URLs — use env vars or config constants
-  All httpx calls must set timeout (A2A: 10.0s, Ollama: 30.0s)
+  A2A calls use a2a-python SDK (handles timeouts); Ollama httpx calls must set timeout=30.0s
 
 rules:
   proposal:

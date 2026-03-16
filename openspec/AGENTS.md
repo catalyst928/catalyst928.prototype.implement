@@ -70,10 +70,18 @@ Run `/opsx:archive` — delta specs merge into `openspec/specs/`, change moves t
 - Billing-gui → Billing-server only (port 8003)
 - No GUI component calls a server of a different subsystem
 
-### Rule 5: Async A2A calls only
-- Always use `httpx.AsyncClient` for A2A inter-service calls
+### Rule 5: Use A2A SDK — do NOT reimplement protocol
+- Use `a2a-python` SDK for all A2A server and client logic (Agent Card serving, skill registration, JSON-RPC dispatch, A2A client calls)
+- Do NOT manually implement JSON-RPC envelope parsing, Agent Card endpoints, or A2A request routing
+- Use `httpx.AsyncClient` only for non-A2A calls (e.g., Ollama)
 - Never use synchronous `requests` library
 - All A2A handler functions must be `async def`
+
+### Rule 6: Use uv for Python package management
+- Use `uv add` to manage dependencies, `uv sync` to install, `uv run` to execute
+- Use `uvx` for running CLI tools
+- Never use `pip install` directly (except `pip install uv` in Dockerfiles)
+- Each Python service has a `pyproject.toml` managed by `uv`
 
 ---
 
@@ -81,46 +89,43 @@ Run `/opsx:archive` — delta specs merge into `openspec/specs/`, change moves t
 
 When adding or modifying a Skill, verify ALL of the following:
 
-- [ ] Skill registered in `/.well-known/agent.json` with full schema
+- [ ] Skill registered via `a2a-python` SDK with full schema (Agent Card, input/output schemas)
 - [ ] Pydantic `InputModel` and `OutputModel` defined in `models.py`
 - [ ] Handler is `async def` and returns `OutputModel`
-- [ ] Registered in `/a2a` route dispatcher (JSON-RPC `method: "tasks/send"`)
+- [ ] Skill registered using `a2a-python` SDK's skill registration mechanism (do NOT manually implement JSON-RPC dispatch)
 - [ ] CORS enabled on the FastAPI app
-- [ ] Error returns standard JSON-RPC error object: `{"code": -32xxx, "message": "..."}`
+- [ ] Error handling uses `a2a-python` SDK error utilities (do NOT manually construct JSON-RPC error objects)
 - [ ] Seed data updated in `seed.py` if new domain data is needed
 - [ ] Field names and status enumerations align with the mapped TMF Open API (see TMForum Alignment table in `project.md`)
+- [ ] Dependencies managed via `uv add` in `pyproject.toml` (including `a2a-python`)
 
 ---
 
 ## Directory Conventions
 
-### Backend (FastAPI) — CRM-server (multi-agent, single process)
+### Backend (FastAPI + a2a-python SDK) — CRM-server (multi-agent, single process)
 ```
 CRM-server/
 ├── src/
-│   ├── main.py                        # FastAPI app entry, CORS, mounts all agent routers
+│   ├── main.py                        # FastAPI app entry, CORS, registers agents via a2a-python SDK
 │   ├── agents/
 │   │   ├── profiling/                 # Profiling Agent
-│   │   │   ├── router.py              # APIRouter: GET /.well-known/agent.json + POST /a2a
-│   │   │   ├── agent_card.py          # Profiling Agent Card definition
+│   │   │   ├── agent.py               # Agent definition using a2a-python SDK (card + skill registration)
 │   │   │   ├── models.py              # Pydantic models for query_customer
 │   │   │   └── skills/
 │   │   │       └── query_customer.py
 │   │   ├── recommendation/            # Recommendation Agent
-│   │   │   ├── router.py
-│   │   │   ├── agent_card.py          # Recommendation Agent Card definition
+│   │   │   ├── agent.py               # Agent definition using a2a-python SDK
 │   │   │   ├── models.py              # Pydantic models for get_nbo
 │   │   │   └── skills/
 │   │   │       └── get_nbo.py
 │   │   ├── order/                     # Order Agent
-│   │   │   ├── router.py
-│   │   │   ├── agent_card.py          # Order Agent Card definition
+│   │   │   ├── agent.py               # Agent definition using a2a-python SDK
 │   │   │   ├── models.py              # Pydantic models for create_order
 │   │   │   └── skills/
 │   │   │       └── create_order.py
 │   │   └── ai_management/             # AI Management Agent
-│   │       ├── router.py
-│   │       ├── agent_card.py          # AI Management Agent Card definition
+│   │       ├── agent.py               # Agent definition using a2a-python SDK
 │   │       ├── models.py              # Pydantic models for get_ai_model_status
 │   │       └── skills/
 │   │           └── get_ai_model_status.py
@@ -131,24 +136,21 @@ CRM-server/
 │   ├── test_recommendation.py         # Tests for get_nbo skill (incl. Ollama fallback)
 │   ├── test_order.py                  # Tests for create_order skill
 │   └── test_ai_management.py          # Tests for get_ai_model_status skill
-└── pyproject.toml
+└── pyproject.toml                     # Managed by uv; includes a2a-python dependency
 
-# Agent routing (mounted in src/main.py):
-#   app.include_router(profiling.router,       prefix="/profiling")
-#   app.include_router(recommendation.router,  prefix="/recommendation")
-#   app.include_router(order.router,           prefix="/order")
-#   app.include_router(ai_management.router,   prefix="/ai-management")
+# Agents registered in src/main.py using a2a-python SDK:
+#   SDK handles Agent Card serving (GET /.well-known/agent.json) and
+#   A2A endpoint (POST /a2a) with JSON-RPC dispatch automatically
 ```
 
-### Backend (FastAPI) — Billing-server (single agent, single process)
+### Backend (FastAPI + a2a-python SDK) — Billing-server (single agent, single process)
 ```
 Billing-server/
 ├── src/
-│   ├── main.py                        # FastAPI app entry, CORS, mounts Usage Agent router
+│   ├── main.py                        # FastAPI app entry, CORS, registers Usage Agent via a2a-python SDK
 │   ├── agents/
 │   │   └── usage/                     # Usage Agent
-│   │       ├── router.py              # APIRouter: GET /.well-known/agent.json + POST /a2a
-│   │       ├── agent_card.py          # Usage Agent Card definition
+│   │       ├── agent.py               # Agent definition using a2a-python SDK (card + skill registration)
 │   │       ├── models.py              # Pydantic models for query_bill
 │   │       └── skills/
 │   │           └── query_bill.py
@@ -156,10 +158,10 @@ Billing-server/
 │   └── seed.py                        # Demo data seeding (billing data)
 ├── test/
 │   └── test_usage.py                  # Tests for query_bill skill
-└── pyproject.toml
+└── pyproject.toml                     # Managed by uv; includes a2a-python dependency
 
-# Agent routing (mounted in src/main.py):
-#   app.include_router(usage.router, prefix="/usage")
+# Agent registered in src/main.py using a2a-python SDK:
+#   SDK handles Agent Card serving and A2A endpoint automatically
 ```
 
 ### Frontend (Vue 3) — per subsystem GUI
@@ -351,7 +353,7 @@ Step 7 — CC-server returns full session summary to CC-gui
 - All FastAPI route handlers and Skill functions must have **type annotations**
 - All Pydantic models must have **field descriptions** (`Field(description="...")`)
 - No hardcoded URLs — use environment variables or `config.py` constants
-- All `httpx` calls must have a **timeout** (`timeout=10.0`)
+- A2A calls use `a2a-python` SDK (handles timeouts internally); non-A2A `httpx` calls (e.g., Ollama) must have an explicit **timeout**
 - Vue components must use `<script setup lang="ts">` with TypeScript
 - API functions in `src/api/` must return **typed responses** using TypeScript interfaces
 
@@ -385,7 +387,9 @@ When writing `spec.md` files, use this format:
 - ❌ Do NOT create shared Python packages across subsystems
 - ❌ Do NOT let CRM or Billing call each other
 - ❌ Do NOT skip Agent Card definition when adding a new Skill
-- ❌ Do NOT use `requests` library — always use `httpx.AsyncClient`
+- ❌ Do NOT use `requests` library — use `a2a-python` SDK for A2A calls, `httpx.AsyncClient` for non-A2A calls
+- ❌ Do NOT manually implement A2A protocol (JSON-RPC dispatch, Agent Card endpoints, envelope parsing) — import and use `a2a-python` SDK
+- ❌ Do NOT use `pip install` directly — use `uv add` for dependencies, `uv run` for execution
 - ❌ Do NOT hardcode `localhost` — use config constants
 - ❌ Do NOT modify `openspec/specs/` directly — use `changes/` workflow
 - ❌ Do NOT configure STUN/TURN servers in WebRTC — Demo uses direct connection only (`iceServers: []`)

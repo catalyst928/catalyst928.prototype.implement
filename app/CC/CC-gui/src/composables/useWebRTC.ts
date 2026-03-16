@@ -27,7 +27,6 @@ function createPeerConnection(): RTCPeerConnection {
     } else if (conn.connectionState === 'failed' || conn.connectionState === 'disconnected') {
       store.callState = 'error'
       store.errorMessage = `WebRTC connection ${conn.connectionState}`
-      scheduleReset()
     }
   }
 

@@ -58,11 +58,11 @@ app/
 ### Backend (All Server modules)
 - **Language**: Python 3.11+
 - **Framework**: FastAPI
-- **A2A Protocol**: Google A2A SDK (JSON-RPC 2.0 over HTTP)
-- **Agent Card**: Each named agent exposes its own Agent Card at `GET /<agent-prefix>/.well-known/agent.json`
+- **A2A Protocol**: `a2a-python` SDK — import and use the library for Agent Card serving, skill registration, JSON-RPC dispatch, and A2A client calls; do NOT reimplement the protocol manually
+- **Agent Card**: Defined via `a2a-python` SDK; each named agent exposes its own Agent Card at `GET /<agent-prefix>/.well-known/agent.json`
 - **Data Store**: SQLite (demo use; each subsystem has its own independent database)
-- **Async**: `asyncio` + `httpx` (for A2A inter-service calls)
-- **Dependency Management**: `uv` + `pyproject.toml`
+- **Async**: `asyncio` + `httpx` (for Ollama and other non-A2A HTTP calls)
+- **Dependency Management**: `uv` + `pyproject.toml` (use `uv add` to manage dependencies, `uv run` to execute, `uvx` for CLI tools)
 
 ### Frontend (All GUI modules)
 - **Framework**: Vue 3 (Composition API)
@@ -125,10 +125,11 @@ Each named agent exposes its own Agent Card at `GET /<agent-prefix>/.well-known/
 | Billing-server (8003) | Usage Agent | `GET /usage/.well-known/agent.json` | `POST /usage/a2a` |
 
 ### Message Format
-- Base protocol: **JSON-RPC 2.0 over HTTP POST**
+- Base protocol: **JSON-RPC 2.0 over HTTP POST** (handled by `a2a-python` SDK — do not implement manually)
 - Content-Type: `application/json`
 - Request path: `/<agent-prefix>/a2a`
-- Standard request body:
+- The `a2a-python` SDK handles request parsing, routing, and response formatting
+- Standard wire format (for reference — the SDK manages this):
 ```json
 {
   "jsonrpc": "2.0",
@@ -204,17 +205,20 @@ A2A Skill interfaces are designed to align with **TM Forum Open API** data model
 - **Agent Card Discovery**: Before any cross-system call, the caller must GET `/<agent-prefix>/.well-known/agent.json` to verify the target Agent's capabilities
 - **Stateless Skills**: Each A2A Skill call is stateless; session state is maintained by CC-server
 - **Error Propagation**: A2A call failures must return a standard JSON-RPC error object; CC-server is responsible for graceful degradation
+- **SDK-First**: All A2A protocol handling (server-side agent registration, skill dispatch, client-side calls) SHALL use the `a2a-python` SDK; do NOT manually implement JSON-RPC parsing, Agent Card serving, or A2A request routing
 
 ---
 
 ## Code Standards
 
 - **Python**: Follow PEP 8; use `pydantic` for request/response model validation; all A2A handlers must have type annotations
+- **A2A SDK**: Use `a2a-python` for all A2A server and client logic; do NOT manually implement JSON-RPC dispatch, Agent Card endpoints, or A2A request envelopes
 - **Vue**: Use `<script setup>` syntax throughout; component filenames in PascalCase; all API calls encapsulated in `src/api/`
 - **Naming**: A2A Skill names use `snake_case`; REST routes use `kebab-case`
 - **No Shared Code**: Each subsystem's code is fully independent; cross-subsystem imports are forbidden; shared types are defined only via A2A JSON Schema
 - **CORS**: All servers enable CORS to allow local GUI cross-origin requests
 - **TMForum Alignment**: Skill input/output field names and status enumerations SHOULD follow TMF Open API conventions; refer to the TMForum OpenAPI Alignment section for the mapping table
+- **Package Management**: Use `uv` for all Python dependency management (`uv add`, `uv sync`, `uv run`); use `uvx` for running CLI tools; never use `pip install` directly (except `pip install uv` in Dockerfiles)
 
 ---
 
@@ -333,4 +337,5 @@ cd app/Billing/Billing-gui && npm run dev
 2. **CC-server is the sole orchestration entry point** — all business flow changes go through CC-server only
 3. **Each GUI connects only to its own subsystem server** — no direct cross-subsystem calls from the frontend
 4. **Each Skill must have its own Pydantic Input/Output Schema**
-5. **Use `httpx.AsyncClient` for all A2A calls** — synchronous `requests` is forbidden
+5. **Use `a2a-python` SDK for all A2A communication** — do not manually implement JSON-RPC, Agent Card serving, or A2A routing; use `httpx.AsyncClient` only for non-A2A calls (e.g., Ollama)
+6. **Use `uv` for Python package management** — `uv add` for dependencies, `uv run` for execution, `uvx` for CLI tools; never use `pip install` directly
