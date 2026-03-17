@@ -104,7 +104,7 @@ export function useWebRTC() {
 
   async function startCall(): Promise<void> {
     const store = useCallStore()
-    signaling.connect()
+    await signaling.connect()
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
     store.localStream = stream

@@ -56,13 +56,24 @@ async def run_business_flow(phone: str, manager: Any) -> None:
             return_exceptions=False,
         )
 
-        # Handle query_bill result
+        # Handle query_bill result (non-fatal — billing server may not be running)
         if isinstance(bill_result, A2AError):
-            await _push_error(manager, bill_result)
-            return
-        await manager.send_to_gui(
-            {"type": "progress", "step": "query_bill", "status": "done"}
-        )
+            logger.warning("query_bill failed (non-fatal): %s", bill_result)
+            bill_result = {
+                "bucket_balance": None,
+                "bucket_balance_unit": None,
+                "due_date": None,
+                "bill_amount": None,
+                "bill_amount_unit": None,
+                "plan_usage_pct": None,
+            }
+            await manager.send_to_gui(
+                {"type": "progress", "step": "query_bill", "status": "skipped"}
+            )
+        else:
+            await manager.send_to_gui(
+                {"type": "progress", "step": "query_bill", "status": "done"}
+            )
 
         # Handle get_ai_model_status result
         await manager.send_to_gui(
@@ -134,11 +145,14 @@ async def run_business_flow(phone: str, manager: Any) -> None:
 
 
 async def _query_bill_safe(customer_id: str) -> dict[str, Any] | A2AError:
-    """Call query_bill, catching A2AError to allow gather to continue."""
+    """Call query_bill, catching errors to allow gather to continue."""
     try:
         return await a2a.query_bill(customer_id)
     except A2AError as e:
         return e
+    except Exception as e:
+        logger.warning("query_bill connection error: %s", e)
+        return A2AError(step="query_bill", code=-32000, message=str(e))
 
 
 async def _get_ai_model_status_safe() -> dict[str, Any] | A2AError:

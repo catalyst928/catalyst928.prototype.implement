@@ -44,16 +44,23 @@ async function applyBufferedCandidates(): Promise<void> {
 export function useWebRTC() {
   async function answerCall(offerSdp: string): Promise<void> {
     const store = useSessionStore()
-    signaling.connect()
+    await signaling.connect()
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-    store.localStream = stream
+    let stream: MediaStream | null = null
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      store.localStream = stream
+    } catch (e) {
+      console.warn('[webrtc] getUserMedia failed, proceeding without local media:', e)
+    }
 
     pc = createPeerConnection()
     offerSet = false
     iceCandidateBuffer.length = 0
 
-    stream.getTracks().forEach((track) => pc!.addTrack(track, stream))
+    if (stream) {
+      stream.getTracks().forEach((track) => pc!.addTrack(track, stream!))
+    }
 
     await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }))
     offerSet = true

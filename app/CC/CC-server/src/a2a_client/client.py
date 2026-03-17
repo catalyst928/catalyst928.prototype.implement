@@ -84,20 +84,30 @@ def _extract_result(response: Any, skill_id: str) -> dict[str, Any]:
             message=str(result.error.message),
         )
 
-    # It should be a Task
-    task = result
+    # Unwrap SendMessageSuccessResponse to get the Task
+    task = result.result if hasattr(result, "result") else result
     if hasattr(task, "status") and task.status.state == TaskState.failed:
-        msg = task.status.message or f"{skill_id} task failed"
-        raise A2AError(step=skill_id, code=-32000, message=str(msg))
+        msg_obj = task.status.message
+        if msg_obj and hasattr(msg_obj, "parts"):
+            texts = [
+                p.root.text if hasattr(p, "root") else p.text
+                for p in msg_obj.parts
+                if hasattr(p.root if hasattr(p, "root") else p, "text")
+            ]
+            msg = " ".join(texts) or f"{skill_id} task failed"
+        else:
+            msg = str(msg_obj) if msg_obj else f"{skill_id} task failed"
+        raise A2AError(step=skill_id, code=-32000, message=msg)
 
     # Extract data from artifacts
     if task.artifacts:
         for artifact in task.artifacts:
             for part in artifact.parts:
-                if hasattr(part, "data") and part.data is not None:
-                    return part.data
-                if hasattr(part, "text") and part.text is not None:
-                    return json.loads(part.text)
+                inner = part.root if hasattr(part, "root") else part
+                if hasattr(inner, "data") and inner.data is not None:
+                    return inner.data
+                if hasattr(inner, "text") and inner.text is not None:
+                    return json.loads(inner.text)
 
     raise A2AError(
         step=skill_id,

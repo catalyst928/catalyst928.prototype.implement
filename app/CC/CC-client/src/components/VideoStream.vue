@@ -23,13 +23,13 @@ const { callState, localStream, remoteStream } = storeToRefs(store)
 const localVideo = ref<HTMLVideoElement | null>(null)
 const remoteVideo = ref<HTMLVideoElement | null>(null)
 
-watch(localStream, (stream) => {
-  if (localVideo.value) localVideo.value.srcObject = stream
-})
+function bindStream(el: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (el) el.srcObject = stream
+}
 
-watch(remoteStream, (stream) => {
-  if (remoteVideo.value) remoteVideo.value.srcObject = stream
-})
+// Watch both the stream and the template ref — whichever arrives last triggers the bind
+watch([localVideo, localStream], ([el, stream]) => bindStream(el, stream))
+watch([remoteVideo, remoteStream], ([el, stream]) => bindStream(el, stream))
 
 onUnmounted(() => {
   if (localVideo.value) localVideo.value.srcObject = null

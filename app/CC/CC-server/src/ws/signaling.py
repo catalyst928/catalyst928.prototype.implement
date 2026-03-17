@@ -42,9 +42,13 @@ class ConnectionManager:
         logger.info("WebSocket connected: role=%s", role)
         return True
 
-    def disconnect(self, role: str) -> None:
-        """Remove the WebSocket connection for the given role."""
-        if role in self._slots:
+    def disconnect(self, role: str, websocket: WebSocket) -> None:
+        """Remove the WebSocket connection for the given role.
+
+        Only clears the slot if it still holds the same WebSocket,
+        preventing a stale disconnect from wiping a newer connection.
+        """
+        if role in self._slots and self._slots[role] is websocket:
             self._slots[role] = None
             logger.info("WebSocket disconnected: role=%s", role)
 
@@ -127,7 +131,7 @@ async def websocket_signal(websocket: WebSocket, role: str = "client") -> None:
                 )
 
     except WebSocketDisconnect:
-        manager.disconnect(role)
+        manager.disconnect(role, websocket)
     except Exception:
         logger.exception("WebSocket error for role=%s", role)
-        manager.disconnect(role)
+        manager.disconnect(role, websocket)

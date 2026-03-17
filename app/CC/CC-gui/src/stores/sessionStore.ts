@@ -54,7 +54,7 @@ export interface Notification {
   sent_at: string
 }
 
-export type StepStatus = 'pending' | 'running' | 'done' | 'error'
+export type StepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error'
 
 const STEP_KEYS = [
   'query_customer',

@@ -9,38 +9,42 @@ let reconnectAttempt = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 const handlers: MessageHandler[] = []
 
-function connect(): void {
-  if (socket && socket.readyState === WebSocket.OPEN) return
+function connect(): Promise<void> {
+  if (socket && socket.readyState === WebSocket.OPEN) return Promise.resolve()
 
-  socket = new WebSocket(WS_URL)
+  return new Promise<void>((resolve, reject) => {
+    socket = new WebSocket(WS_URL)
 
-  socket.onmessage = (event: MessageEvent) => {
-    try {
-      const msg = JSON.parse(event.data as string) as Record<string, unknown>
-      handlers.forEach((h) => h(msg))
-    } catch {
-      // ignore non-JSON frames
+    socket.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data as string) as Record<string, unknown>
+        handlers.forEach((h) => h(msg))
+      } catch {
+        // ignore non-JSON frames
+      }
     }
-  }
 
-  socket.onopen = () => {
-    reconnectAttempt = 0
-  }
+    socket.onopen = () => {
+      reconnectAttempt = 0
+      resolve()
+    }
 
-  socket.onerror = (e) => {
-    console.error('[signaling] WebSocket error', e)
-  }
+    socket.onerror = (e) => {
+      console.error('[signaling] WebSocket error', e)
+      reject(e)
+    }
 
-  socket.onclose = () => {
-    socket = null
-    const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS)
-    reconnectAttempt++
-    console.warn(`[signaling] WebSocket closed, reconnecting in ${delay}ms`)
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null
-      connect()
-    }, delay)
-  }
+    socket.onclose = () => {
+      socket = null
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS)
+      reconnectAttempt++
+      console.warn(`[signaling] WebSocket closed, reconnecting in ${delay}ms`)
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        connect()
+      }, delay)
+    }
+  })
 }
 
 function send(msg: Record<string, unknown>): void {

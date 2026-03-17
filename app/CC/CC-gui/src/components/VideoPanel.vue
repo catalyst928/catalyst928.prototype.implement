@@ -30,17 +30,13 @@ const store = useSessionStore()
 const remoteVideoEl = ref<HTMLVideoElement | null>(null)
 const localVideoEl = ref<HTMLVideoElement | null>(null)
 
-watch(() => store.remoteStream, (stream) => {
-  if (remoteVideoEl.value) {
-    remoteVideoEl.value.srcObject = stream
-  }
-})
+function bindStream(el: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (el) el.srcObject = stream
+}
 
-watch(() => store.localStream, (stream) => {
-  if (localVideoEl.value) {
-    localVideoEl.value.srcObject = stream
-  }
-})
+// Watch both the template ref and the stream — whichever arrives last triggers the bind
+watch([remoteVideoEl, () => store.remoteStream], ([el, stream]) => bindStream(el, stream))
+watch([localVideoEl, () => store.localStream], ([el, stream]) => bindStream(el, stream))
 </script>
 
 <style scoped>

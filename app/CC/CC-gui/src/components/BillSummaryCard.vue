@@ -15,10 +15,10 @@
     </div>
     <div class="field usage-field">
       <span class="field-label">Plan Usage</span>
-      <span class="field-value">{{ bill.plan_usage_pct }}%</span>
+      <span class="field-value">{{ bill.plan_usage_pct != null ? bill.plan_usage_pct + '%' : '—' }}</span>
     </div>
     <div class="usage-bar">
-      <div class="usage-fill" :class="usageColor" :style="{ width: bill.plan_usage_pct + '%' }" />
+      <div class="usage-fill" :class="usageColor" :style="{ width: (bill.plan_usage_pct ?? 0) + '%' }" />
     </div>
   </div>
 </template>
@@ -31,16 +31,19 @@ const props = defineProps<{ bill: Bill }>()
 
 const usageColor = computed(() => {
   const pct = props.bill.plan_usage_pct
+  if (pct == null) return 'fill-green'
   if (pct > 90) return 'fill-red'
   if (pct >= 70) return 'fill-amber'
   return 'fill-green'
 })
 
-function formatCurrency(value: number, unit: string): string {
+function formatCurrency(value: number | null, unit: string | null): string {
+  if (value == null || unit == null) return '—'
   return `${unit} ${value.toFixed(2)}`
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
   const d = new Date(iso)
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`

@@ -14,15 +14,21 @@
             <path d="M6 10l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
+        <span v-else-if="step.status === 'skipped'" class="icon icon-skipped">
+          <svg width="20" height="20" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="9" fill="var(--color-neutral)" />
+            <path d="M7 10h6" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </span>
         <span v-else class="icon icon-error">
           <svg width="20" height="20" viewBox="0 0 20 20">
             <circle cx="10" cy="10" r="9" fill="var(--color-error)" />
             <path d="M7 7l6 6M13 7l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" />
           </svg>
         </span>
-        <div v-if="index < steps.length - 1" class="connector" :class="{ 'connector-done': step.status === 'done' }" />
+        <div v-if="index < steps.length - 1" class="connector" :class="{ 'connector-done': step.status === 'done' || step.status === 'skipped' }" />
       </div>
-      <span class="step-label" :class="{ 'step-muted': step.status === 'pending', 'step-error': step.status === 'error' }">
+      <span class="step-label" :class="{ 'step-muted': step.status === 'pending' || step.status === 'skipped', 'step-error': step.status === 'error' }">
         {{ step.label }}
       </span>
     </div>

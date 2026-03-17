@@ -39,7 +39,7 @@ export function useMessageHandler() {
 
       case 'progress': {
         const step = msg.step as string
-        const status = msg.status as 'running' | 'done'
+        const status = msg.status as 'running' | 'done' | 'skipped'
         store.progressSteps[step] = status
         break
       }
