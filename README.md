@@ -343,5 +343,5 @@ Each server seeds its SQLite database at startup with 3 test customers:
 
 | CC-client (Mobile — Customer Caller) | CC-gui (Desktop — Agent Dashboard) |
 |:---:|:---:|
-| <img src="docs/cc-client-mobile.jpg" width="260" /> | <img src="docs/cc-gui-desktop.jpg" width="600" /> |
+| <img src="docs/cc-client-mobile.png" width="260" /> | <img src="docs/cc-gui-desktop.png" width="600" /> |
 
